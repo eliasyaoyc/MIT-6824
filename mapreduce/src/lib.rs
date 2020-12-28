@@ -1,3 +1,5 @@
 mod master;
-mod rpc;
 mod worker;
+mod mrsequential;
+mod error;
+pub use error::{mrError,Result};
