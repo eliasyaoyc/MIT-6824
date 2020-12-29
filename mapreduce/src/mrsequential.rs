@@ -1,47 +1,72 @@
-use std::{env, fs};
-use crate::{mrError::*, Result};
-use std::collections::{HashMap, LinkedList};
+use std::thread;
+use crate::{KeyValue, MrPhase, merge_name, merge};
+use crate::common_map::common_map;
+use crate::common_reduce::common_reduce;
+use log::info;
 
-trait mapreduce {
-    fn map(mut files: &Vec<String>) -> Result<HashMap<String, LinkedList<String>>>;
-    fn reduce(key: &String, values: &LinkedList<String>) -> Result<HashMap<String, usize>>;
-    fn readFile(filename: &str) -> String;
+#[allow(non_snake_case)]
+pub fn sequential(
+    job_name: String,
+    files: Vec<String>,
+    n_reduce: usize,
+    mapFunc: fn(&str, &str) -> Vec<KeyValue>,
+    reduceFunc: fn(&str, &Vec<String>) -> String,
+) {
+    let handle = thread::Builder::new()
+        .name("sequential-thread".to_owned())
+        .spawn(move || {
+            run(
+                job_name.clone(),
+                &files,
+                n_reduce,
+                |phase| match phase {
+                    MrPhase::MapPhase => {
+                        for (i, f) in files.iter().enumerate() {
+                            common_map(
+                                &job_name,
+                                i,
+                                f,
+                                n_reduce,
+                                mapFunc);
+                        }
+                    }
+                    MrPhase::ReducePhase => {
+                        for i in 0..n_reduce {
+                            common_reduce(
+                                &job_name,
+                                i,
+                                &merge_name(&job_name, i),
+                                files.len(),
+                                reduceFunc);
+                        }
+                    }
+                },
+                seq_finish,
+            )
+        });
+    handle.unwrap().join().expect("sequential join failed.");
 }
 
-impl mapreduce {
-    fn map(mut files: &Vec<String>) -> Result<HashMap<String, LinkedList<String>>> {
-        Err(MapFuncError)
-    }
-
-    fn reduce(key: &String, values: &LinkedList<String>) -> Result<HashMap<String, usize>> {
-        Err(ReduceFuncError);
-    }
-
-    fn readFile(filename: &str) -> String {
-        fs::read_to_string(filename).expect(&format!("can't read file {}", filename))
-    }
+#[allow(unused_variables)]
+fn run<F>(
+    job_name: String,
+    files: &Vec<String>,
+    n_reduce: usize,
+    schedule: F,
+    finish: fn(), )
+    where F: Fn(MrPhase)
+{
+    info!("Start run: ");
+    schedule(MrPhase::MapPhase);
+    schedule(MrPhase::ReducePhase);
+    finish();
+    merge(&job_name, n_reduce);
+    info!("run finish");
 }
 
-pub fn start_without_env(filepaths: Vec<String>) -> Result<Option<String>> {
-    if filepaths.is_empty() {
-        Err(CommandLineError)
-    }
-    let mut files: Vec<String> = Vec::with_capacity(filepaths.len());
 
-    for fp in filepaths {
-        files.push(mapreduce::readFile(fp.as_ref()));
-    }
-
-    let kv = mapreduce::map(&files).unwrap();
-    if !kv.is_empty() {
-        for i in kv {
-            let reduce_result = !mapreduce::reduce(&i.0, &i.1).unwrap();
-            if !reduce_result.is_empty() {
-                println!("key: {:?},counts: {:?}", reduce_result.0, reduce_result.1);
-            }
-        }
-    }
-    Ok(None)
+fn seq_finish() {
+    info!("check the mrtmp:{{jobname}} file for result.");
 }
 
 #[cfg(test)]
