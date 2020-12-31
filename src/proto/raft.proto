@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package raft;
+
+service RaftServer {
+  rpc handleVoteRequest(VoteRequest) returns (VoteResponse);
+  rpc handleAppendEntriesRequest(AppendEntriesRequest) returns (AppendEntriesResponse);
+  rpc handleInstallSnapshotRequest(InstallSnapshotRequest) returns (InstallSnapshotResponse);
+}
+
+message VoteRequest {
+  uint32 term = 1;
+  string candidateId = 2;
+  uint32 lastLogIndex = 3;
+  uint32 lastLogTerm = 4;
+}
+
+message VoteResponse {
+  uint32 term = 1;
+  string voteGranted = 2;
+}
+
+message AppendEntriesRequest {
+  uint32 term = 1;
+  string leaderId = 2;
+  uint32 prevLogIndex = 3;
+  uint32 preLogTerm = 4;
+  repeated Record entries = 5;
+  uint32 leaderCommit = 6;
+}
+
+message AppendEntriesResponse {
+  uint32 term = 1;
+  bool success = 2;
+}
+
+message InstallSnapshotRequest{
+  uint32 term = 1;
+  string leaderId = 2;
+  uint32 lastIncludedIndex = 3;
+  uint32 lastIncludedTerm = 4;
+  uint32 offset = 5;
+  repeated Record data = 6;
+  bool done = 7;
+
+}
+
+message InstallSnapshotResponse{
+  uint32 term = 1;
+}
+
+message Record{
+  string contents = 1;
+}
